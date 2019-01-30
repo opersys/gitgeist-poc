@@ -1,0 +1,33 @@
+<html>
+  <head>
+    <title>{{title}}</title>
+    <link rel="stylesheet" type="text/css" href="/style">
+    {{> reload}}
+  </head>  
+  <body>
+    {{^hasFollowings}}
+      <h1 class="title">Following nobody</h1>
+      {{/hasFollowings}}
+    
+      {{#hasFollowings}}
+        {{#gitSocial.following}}
+          <a href="/priv#{{email}}">{{email}}</a>
+        {{/gitSocial.following}}
+      {{/hasFollowings}}
+      <a href="/priv#local">Local posts</a>
+
+      <hr />
+      
+      {{#gitSocial.remotes}}
+        <div class="remotePosts">
+          <h3><a name="{{email}}">{{email}}</a></h3>
+          {{> repos}}
+        </div>
+      {{/gitSocial.remotes}}
+
+      {{#gitSocial.local}}
+        <h3><a name="local">Local posts</a></h3>
+        {{> repos}}
+      {{/gitSocial.local}}
+  </body>
+</html>

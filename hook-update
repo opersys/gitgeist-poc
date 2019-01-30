@@ -1,0 +1,73 @@
+#!/bin/bash -x
+
+ref=$1
+rev_old=$2
+rev_new=$3
+
+zero="0000000000000000000000000000000000000000"
+
+if [ "$rev_old" = "$zero" ]; then
+    span=$(git rev-list $rev_new --not --branches='*')
+else
+    span=$(git rev-list ^$rev_old $rev_new)
+fi
+
+if [ -z "$span" ]; then
+    type=$(git cat-file -t $rev_new)
+    case $type in
+        commit)
+            ;;
+        tag)
+            echo "Rejecting tag push"
+            exit 1
+            ;;
+        *)
+            echo "*** No new commits, but the pushed ref $ref is a \"$type\" instead of a tag? I'm confused." >&2
+            exit 1
+            ;;
+    esac
+fi
+
+# Extract the local key ID so we can push to our own repository!
+local_keyid=$(gpg --with-colons --with-fingerprint < ../data/key.gpg \
+                  | grep fpr \
+                  | cut -d ':' -f 10 \
+                  | tr -d ' ')
+echo "Local key ID: " $local_keyid >&2
+
+if [ -z "$local_keyid" ]; then
+    exit 1
+fi
+
+for commit in $span; do
+    verify_sig=$(git verify-commit --raw "$commit" 2>&1)
+
+    if [ -z "$verify_sig" -a -f "../data/insecure" ]; then
+        echo "This commit is unsigned but accepting anyway as you desire ('data/insecure' exists.)"
+        exit 0
+    fi
+
+    signing_keyid=$(gpg --with-colons --with-fingerprint --list-keys \
+                        $(git show --no-patch --format=%GK "$commit") \
+                        | grep fpr \
+                        | cut -d ':' -f 10 \
+                        | tr -d ' ')
+
+    echo "Signing key ID: " $signing_keyid >&2
+
+    # Check if it's the local keyid.
+    if [ "$signing_keyid" = "$local_keyid" ]; then
+        continue
+    fi
+
+    if [ ! -z "$signing_keyid" ]; then
+        # Look for the signing key in data/followers
+        grep $signing_keyid ../data/followers
+        if [ $? != 0 ]; then
+            echo "$signing_keyid not local key nor in followers"
+            exit 1
+        fi
+    fi
+done
+
+exit 0

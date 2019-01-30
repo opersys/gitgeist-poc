@@ -1,0 +1,72 @@
+#!/bin/bash
+
+if [[ -z "$1" || -z "$2" || -z "$3" || -z "$4" || -z "$5" ]]; then
+    echo "scripts/init hostname port email username password"
+    exit 1
+fi
+
+hostname=${1}
+port=${2}
+email=${3}
+nokey=1
+
+keyemails=$(gpg --list-keys 2> /dev/null | grep ^uid 2> /dev/null | perl -ne '/<(.*)>/ && print $1')
+
+if [[ -z "${keyemails}" ]]; then
+    echo "No GPG keys. You need to create at least one."
+    exit 1
+fi
+    
+for keyemail in ${keyemails}; do
+    if [[ "${keyemail}" == "${email}" ]]; then
+       nokey=0
+    fi
+done
+
+if [[ ${nokey} == 1 ]]; then
+    echo "Key for email ${email} not found. Please create it or verify your email address."
+    exit 1
+fi
+
+# Initialize the repository
+mkdir -p posts data config public repos
+touch following
+
+echo $1 > config/hostname
+echo $2 > config/port
+echo $3 > config/email
+echo $4 > config/user
+echo $5 > config/password
+echo "A GitSocial site" > config/title
+
+# Export the key we'll use for this repository.
+if [[ ! -f data/key.gpg ]]; then
+    gpg --armor --output data/key.gpg --export $3
+fi
+
+# Initialize the local git repository for the content.
+git init
+
+git config http.receivePack true
+git config receive.denyCurrentBranch ignore
+
+echo "data" > .gitignore
+echo "scripts" >> .gitignore
+echo "public" >> .gitignore
+touch data/followers
+touch data/following
+touch .git/git-daemon-export-ok
+cp scripts/data/style.css .
+cp scripts/data/logo.png .
+
+git add posts
+git add following
+git add style.css
+
+git commit -m "Initialisation commit."
+
+# Copy the GPG update hook in place.
+ln -fs $(pwd)/scripts/hook-update $(pwd)/.git/hooks/update
+ln -fs $(pwd)/scripts/hook-post-update $(pwd)/.git/hooks/post-update
+ln -fs $(pwd)/scripts/hook-post-commit $(pwd)/.git/hooks/post-commit
+

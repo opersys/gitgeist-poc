@@ -1,0 +1,26 @@
+<div class="posts">
+  {{#posts}}
+    <div class="post">
+      <div class="content">
+        {{{indexContent}}}
+      </div>
+      <div class="timestamp">
+        {{indexTimestamp}}
+      </div>                          
+      
+      <div class="comments">
+        {{#comments}}
+          <div class="comment">
+            <div class="title">
+
+            </div>
+            
+            <div class="content">
+              {{{commentContent}}}
+            </div>
+          </div>
+        {{/comments}}
+      </div>
+    </div>
+  {{/posts}}
+</div>

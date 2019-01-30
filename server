@@ -1,0 +1,769 @@
+#!/usr/bin/env node
+
+const fsL = require("fs"); // For functions unailable in fs.promises.
+const fs = require("fs").promises;
+const http = require("http");
+const path = require("path");
+const URL = require("url");
+const spawn = require("child_process").spawn;
+
+var port, hostname;
+
+function regenerate() {
+    return new Promise((resolve, reject) => {
+        console.log("Regenerating index page");
+
+        let gen = spawn("scripts/gen", []);
+        
+        gen.on("close", (code) => {
+            if (code == 0)
+                resolve();
+            else
+                reject();
+        });
+
+        gen.on("error", (err) => {
+            reject();
+        });
+    });
+}
+
+function cloneFollower(follower) {
+    return new Promise((resolve, reject) => {
+        let git = spawn("/usr/bin/git", [
+            "clone",
+            `${follower.url}git`,
+            path.join("repos", follower.email)
+        ]);
+
+        git.on("close", () => {
+            regenerate()
+                .then(() => {
+                    resolve();
+                })
+                .catch((err) => {
+                    if (err)
+                        console.log(err);
+                    else
+                        console.log("Failed page regeneration after git clone");
+                    
+                    // Failed generation does not invalide the clone.
+                    resolve();
+                });
+        });
+
+        git.on("error", (err) => {
+            reject(err);
+        });
+    });
+}
+
+// Run the local scripts/follow script to follow a new URL
+function remoteFollow(targetUrl) {
+    return new Promise((resolve, reject) => {
+        let followScript = spawn("scripts/follow", [
+            targetUrl
+        ]);
+
+        followScript.on("close", (code) => {
+            if (code != 0)
+                reject(new Error(`statusCode is ${code}`));
+            else
+                resolve();
+        });
+
+        followScript.on("error", (err) => {
+            reject(err);
+        });
+    });
+}
+
+// Run the local scripts/unfollow script to unfollow an URL
+function remoteUnfollow(targetUrl) {
+    return new Promise((resolve, reject) => {
+        let unfollowScript = spawn("scripts/unfollow", [
+            targetUrl
+        ]);
+
+        unfollowScript.on("close", (code) => {
+            if (code != 0)
+                reject(new Error(`statusCode is ${code}`));
+            else
+                resolve();
+        });
+
+        unfollowScript.on("error", (err) => {
+            reject(err);
+        });
+    });    
+}
+
+function updateFollower(follower) {
+    let git = spawn("/usr/bin/git", ["pull"], {
+        cwd: path.join("repos", follower.email)
+    });
+
+    git.on("close", (code) => {
+        regenerate();
+    });
+}
+
+function isFollowing(storedFollows, targetUrl) {
+    for (let storedFollow of storedFollows)
+        if (storedFollow.url == targetUrl)
+            return true;
+
+    return false;
+}
+
+// Open the 'following' file and check it against data/following.
+function checkFollowing() {
+    return Promise.all([
+        getFollowing(),
+        fs.readFile("following")
+    ]).then((values) => {
+        let storedFollows = values[0];
+        let userFollowsUrls = new Set(values[1].toString()
+                                      .split("\n")
+                                      .filter((s) => {return s != "";})
+                                      .map((s) => {return s.trim();}));
+
+        for (let userFollowsUrl of userFollowsUrls) {
+            if (!isFollowing(storedFollows, userFollowsUrl)) {               
+                // Trigger the follow process.
+                remoteFollow(userFollowsUrl)
+                    .then(() => {
+                        console.log(`Added follow URL: ${userFollowsUrl}`);
+                    })
+                    .catch(() => {
+                        console.log(`Failed to add follow URL: ${userFollowsUrl}`);
+                    });                
+            }
+        }
+
+        // Scan the currently stored following URLs to see if one was removed.
+        for (let storedFollow of storedFollows) {
+            if (!userFollowsUrls.has(storedFollow.url)) {
+                // Trigger the unfollow process.                
+                remoteUnfollow(storedFollow.url)
+                    .then(() => {
+                        console.log(`Removed follow URL: ${storedFollow.url}`);                        
+                    })
+                    .catch(() => {
+                        console.log(`Failed to remove follow URL: ${storedFollow.url}`);
+                    });
+            }
+        }
+    });
+}
+
+function gpgGetKeyData(keyData, callback) {
+    return new Promise((resolve, reject) => {
+        let gpg = spawn("gpg", ["--with-fingerprint", "--with-colons"], {
+            shell: true,
+            stdio: ['pipe', 'pipe', process.stderr]
+        });
+        let output = "";
+        let email = "";
+        let keyid = "";
+
+        gpg.stdout.on("data", (chunk) => {
+            output += chunk.toString();
+        });
+
+        gpg.on("exit", () => {
+            let gpgLines = output.split("\n");
+
+            for (let line of gpgLines) {
+                if (line.startsWith("pub"))
+                    email = line.substring(line.indexOf("<") + 1, line.length - 2);
+                else if (line.startsWith("fpr:::::::::"))
+                    keyid = line.substring(12, line.length - 1).trim();
+            }
+
+            if (email == null || email == "")
+                reject(new Error("email cannot be null or empty"));
+            if (keyid == null || keyid == "")
+                reject(new Error("keyid cannot be null or empty"));
+            
+            resolve(email, keyid);
+        });
+
+        gpg.on("error", (err) => {
+            reject(err);
+        });
+
+        gpg.stdin.end(keyData);       
+    });
+}
+
+function readNodeDataFile(filename, callback) {
+    return new Promise((resolve, reject) => {
+        // Open the following file.
+        let fin = fsL.createReadStream(filename);
+        let content = "";
+
+        fin.on("data", (chunk) => {
+            content += chunk.toString();
+        });
+
+        fin.on("end", () => {
+            let dataLines = content.split("\n");
+            let data = dataLines
+                    .filter((dataLine) => {
+                        return dataLine != "";
+                    })
+                    .map((dataLine) => {
+                        let dataLineSplit = dataLine.split(" ");
+                        return {
+                            email: dataLineSplit[0].trim(),
+                            url: dataLineSplit[1].trim(),
+                            keyid: dataLineSplit[2].trim()
+                        };
+                    });
+
+            fin.close();
+
+            resolve(data);
+        });        
+    });
+}
+
+function getFollowing() {
+    return readNodeDataFile(path.join("data", "following"));
+}
+
+function getFollowers() {
+    return readNodeDataFile(path.join("data", "followers"));
+}
+
+function saveFollowers(followers) {
+    let followersLines = followers.map((follower) => {
+        return `${follower.email} ${follower.url} ${follower.keyid}`;
+    });
+
+    return fs.writeFile(path.join("data", "followers"), followersLines.join("\n"));
+}
+
+function follow(keyData, url) {
+    let fin, content, email, keyid;
+
+    // Extract the key email.
+    return gpgGetKeyData(keyData)
+        .then((e, k) => {
+            email = e;
+            keyid = k;
+            
+            return fs.writeFile(path.join("data", `${email}.gpg`), keyData);
+        })
+        .then(() => {
+            // Open the follower file.
+            fin = fsL.createReadStream(path.join("data", "followers"));
+            content = "";
+
+            return getFollowers();
+        })
+        .then((followers) => {
+            let doAdd = true;
+            
+            for (let follower of followers) {
+                if (follower.email == email) {
+                    doAdd = false;
+                    break;
+                }
+            }
+
+            if (doAdd) {
+                followers.push({
+                    email: email,
+                    url: url,
+                    keyid: keyid
+                });
+            }
+            return saveFollowers(followers);            
+        })
+        .then(() => {
+            return regenerate();
+        });
+}
+
+function unfollow(keyData, url) {
+    let fin, content, email, keyid;
+
+    // Extract the key email.
+    return gpgGetKeyData(keyData)
+        .then((e, k) => {
+            email = e;
+            keyid = k;
+
+            return fs.writeFile(path.join("data", `${email}.gpg`), keyData);
+        })
+        .then(() => {
+            // Open the follower file.
+            fin = fsL.createReadStream(path.join("data", "followers"));
+            content = "";
+
+            return getFollowers();
+        })
+        .then((followers) => {
+            let doAdd = true;
+
+            followers = followers.filter((follower) => {
+                return follower.email != email && follower.keyid != keyid;
+            });
+
+            return saveFollowers(followers);
+        })
+        .then(() => {
+            return regenerate();            
+        });
+}
+
+function readOptions() {
+    return new Promise((resolve, reject) => {
+        Promise.all([
+            fs.readFile(path.join("config", "port")),
+            fs.readFile(path.join("config", "hostname")),
+            fs.readFile(path.join("config", "user")),
+            fs.readFile(path.join("config", "password")),
+            fs.readFile(path.join("config", "title"))
+        ]).then((values) => {
+            resolve({
+                port: values[0].toString().trim(),
+                hostname: values[1].toString().trim(),
+                user: values[2].toString().trim(),
+                password: values[3].toString().trim(),
+                title: values[4].toString().trim()
+            });
+        });   
+    });
+}
+
+function handleUnfollowReq(req, res) {
+    let localUrl = URL.parse(req.url);
+    let localSp = new URLSearchParams(localUrl.search);
+    let targetUrl = URL.parse(localSp.get("url"));
+    const keyOpts = {
+        host: targetUrl.hostname,
+        port: targetUrl.port,
+        path: "/key"
+    };
+
+    console.log(`Unfollow request from: ${req.connection.remoteAddress}`);
+
+    // Lookup the public key of the follower.
+    const keyReq = http.request(keyOpts);
+    keyReq.end();
+
+    keyReq.on("response", (keyRes) => {
+        let keyData = "";
+
+        keyRes.on("data", (chunk) => {keyData += chunk;});
+        keyRes.on("end", () => {
+            unfollow(keyData, targetUrl.href);
+        });
+
+        if (keyRes.statusCode == 200) {
+            // Got the key!
+            console.log(`Got the key, accepting unfollow request from: ${req.connection.remoteAddress}`);
+
+            // Return the local key.
+            fs.readFile(path.join("data", "key.gpg"))
+                .then((data) => {
+                    res.writeHead(200);
+                    res.end(data);
+                });
+        } else {
+            res.writeHead(403);
+            res.end(`Failed to get follower key on ${targetUrl.href}: ${keyRes.statusCode}`);
+        }
+    });
+
+    keyReq.on("error", (err) => {
+        // No key, error out.
+        res.writeHead(403);
+        res.end(JSON.stringify(err));
+    });
+}
+
+function handleFollowReq(options, req, res) {
+    let localUrl = URL.parse(req.url);
+    let localSp = new URLSearchParams(localUrl.search);
+    let targetUrl = URL.parse(localSp.get("url"));
+    const keyOpts = {
+        host: targetUrl.hostname,
+        port: targetUrl.port,
+        path: "/key"
+    };
+    const pingOpts = {
+        host: targetUrl.hostname,
+        port: targetUrl.port,
+        path: `/ping?url=${options.hostname}:${options.port}`
+    };
+
+    console.log(`Follow request from: ${req.connection.remoteAddress}`);
+
+    // Lookup the public key of the follower.
+    const keyReq = http.request(keyOpts);
+    keyReq.end();
+
+    keyReq.on("response", (keyRes) => {
+        let keyData = "";
+
+        keyRes.on("data", (chunk) => {keyData += chunk;});
+        keyRes.on("end", () => {
+            follow(keyData, targetUrl.href)
+                .then(() => {
+                    setTimeout(() => {
+                        http.get(pingOpts);
+                    }, 5000);
+                })
+                .catch((err) => {
+                    if (err)
+                        console.log(err);
+                    else
+                        console.log("Could not complete follow process");
+                });
+        });
+
+        if (keyRes.statusCode == 200) {
+            // Got the key!
+            console.log(`Got the key, accepting follow request from: ${targetUrl.href}`);
+
+            // Return the local key.
+            fs.readFile(path.join("data", "key.gpg"))
+                .then((data) => {
+                    res.writeHead(200);
+                    res.end(data);
+                });
+        } else {
+            res.writeHead(403);
+            res.end(`Failed to get follower key on ${targetUrl.href}: ${keyRes.statusCode}`);
+        }
+    });
+
+    keyReq.on("error", (err) => {
+        // No key, error out.
+        res.writeHead(403);
+        res.end(JSON.stringify(err));
+    });
+}
+
+function handlePingReq(req, res) {
+    let isFollower = false;
+    let localUrl = URL.parse(req.url);
+    let localSp = new URLSearchParams(localUrl.search);
+    let targetUrl = URL.parse(`http://${localSp.get("url")}`);
+
+    console.log(`Ping request from: ${req.connection.remoteAddress}`);
+
+    // Just answer since the caller won't wait for a result anyway.
+    res.writeHead(200);
+    res.end();
+
+    // Verify that the incoming request comes from a server
+    // we follow.
+    getFollowing().then((followings) => {
+        for (let following of followings) {
+            if (targetUrl.href.endsWith("/") && !following.url.endsWith("/"))
+                following.url += "/";
+
+            // Known followee? Great!
+            if (following.url == targetUrl.href) {
+                isFollower = true;
+
+                // Check if we already have this repository.
+                fs.access(path.join("repos", following.email))
+                    .then(() => {
+                        // Known repository, fetch it.
+                        updateFollower(following);
+                    })
+                    .catch(() => {
+                        // Unknown repository, clone it.
+                        cloneFollower(following);                        
+                    });
+            }
+        }
+
+        if (!isFollower)
+            console.log(`Ping from unknown followee ${targetUrl.href}`);
+    });
+}
+
+// Serve index page
+function handleIndex(req, res) {
+    console.log(`Index request from: ${req.connection.remoteAddress}`);
+
+    fs.readFile(path.join("public", "index.html"))
+        .then((data) => {
+            res.writeHead(200);
+            res.end(data);
+        })
+        .catch((err) => {
+            res.writeHead(404);
+            res.end("Index not generated");
+        });
+}
+
+// Server private index path
+function handlePrivIndex(options, req, res) {
+    let auth, authStr, authUser, authPwd;
+
+    auth = req.headers["authorization"];
+    
+    if (auth && auth.startsWith("Basic ")) {
+        authStr = Buffer.from(auth.substring(6), "base64").toString("ascii");
+        authUser = authStr.substring(0, authStr.indexOf(":"));
+        authPwd = authStr.substring(authStr.indexOf(":") + 1, authStr.length);
+
+        if (authUser == options.user && authPwd == options.password) {
+            console.log(`Private index request from: ${req.connection.remoteAddress}`);
+            
+            fs.readFile(path.join("public", "priv.html"))
+                .then((data) => {                   
+                    res.writeHead(200);
+                    res.end(data);
+                });
+
+            // Must exit here or we'll get password prompt again.
+            return;
+        }
+    }
+
+    res.setHeader("WWW-Authenticate", `Basic realm="Blarg"`);
+    res.writeHead(401, "Access Denied");
+    res.end();
+}
+
+function handlePostsReq(req, res) {
+    let url = URL.parse(req.url);
+    let fpath = url.pathname.substring(1);
+
+    console.log(`Static post request of ${fpath} from: ${req.connection.remoteAddress}`);
+
+    // Skip the first / in the pathname
+    fs.readFile(fpath)
+        .then((data) => {
+            res.writeHead(200);
+            res.end(data);
+        })
+        .catch((err) => {
+            res.writeHead(404);
+            res.end(`No file at path ${fpath}`);
+        });
+}
+
+function handleKeyReq(req, res) {
+    console.log(`Key request from: ${req.connection.remoteAddress}`);
+
+    fs.readFile(path.join("data", "key.gpg"))
+        .then((data) => {
+            res.writeHead(200);
+            res.end(data);
+        })
+        .catch((err) => {
+            res.writeHead(404);
+            res.end("No key.gpg file");
+        });
+}
+
+function handleStyleReq(req, res) {
+    console.log(`Style request from: ${req.connection.remoteAddress}`);
+
+    fs.readFile("style.css")
+        .then((data) => {
+            res.writeHead(200);
+            res.end(data);
+        })
+        .catch((err) => {
+            res.writeHead(404);
+            res.end("No style.css file");
+        });
+}
+
+function handleLogoReq(req, res) {
+    console.log(`Logo request from: ${req.connection.remoteAddress}`);
+
+    fs.readFile("logo.png")
+        .then((data) => {
+            res.writeHead(200);
+            res.end(data);
+        })
+        .catch((err) => {
+            res.writeHead(404);
+            res.end("No logo.png file");
+        });    
+}
+
+// This code forwards HTTP requests to the Git repository.
+// Heavily inspired by:
+//    https://github.com/TooTallNate/node-cgi/blob/master/cgi.js
+//    https://github.com/fgnass/gateway/blob/master/gateway.js
+// but we want NO dependencies for now.
+function handleGitReq(req, res) {
+    console.log(`Git request: ${req.connection.remoteAddress}`);
+
+    let statusExp = /^Status:\s*(\d{3}) (.*)$/i;
+    let url = URL.parse(req.url),
+        originalUrl = req.originalUrl ? URL.parse(req.originalUrl) : url;
+    let host = (req.headers.host || '').split(':');
+    let env = {
+        PATH: process.env.PATH,
+        GATEWAY_INTERFACE: 'CGI/1.1',
+        SERVER_PROTOCOL: 'HTTP/1.1',
+        SERVER_ROOT: process.cwd(),
+        DOCUMENT_ROOT: process.cwd(),
+        SERVER_NAME: host[0],
+        SERVER_PORT: host[1] || 80,
+        REDIRECT_STATUS: 200,
+        SCRIPT_NAME: originalUrl.pathname,
+        REQUEST_URI: originalUrl.path,
+        REQUEST_METHOD: req.method,
+        QUERY_STRING: url.query || '',
+        REMOTE_ADDR: req.connection.remoteAddress,
+        GIT_PROJECT_ROOT: path.join(process.cwd()),
+        PATH_INFO: url.pathname.replace("git", ".git")
+    };
+
+    for (let header in req.headers) {
+        let name = 'HTTP_' + header.toUpperCase().replace(/-/g, '_');
+        env[name] = req.headers[header];
+    }
+
+    if ('content-length' in req.headers)
+        env.CONTENT_LENGTH = req.headers['content-length'];
+
+    if ('content-type' in req.headers)
+        env.CONTENT_TYPE = req.headers['content-type'];
+
+    let body,
+        line = [],
+        statusCode,
+        reason,
+        exit,
+        end;
+
+    function error(code, reason, headers) {
+        res.writeHead(code || 500, reason, headers);
+        res.end();
+    }
+
+    function done() {
+        if (exit === undefined || !end) return
+        if (exit && !body) error(500, handler + ' exited with code ' + exit);
+        else res.end();
+    }
+
+    let child = spawn("/usr/bin/git", [
+        "http-backend",
+    ], {
+        env: env,
+        stdio: ['pipe', 'pipe', process.stderr]
+    }).on('error', (err) => {
+        exit = -1;
+        done();
+    }).on('exit', (code) => {
+        exit = code;
+        done();
+    });
+
+    child.stdout.on('end', () => {
+        end = true;
+        done();
+    }).on('data', (buf) => {
+        if (body) return res.write(buf);
+
+        for (let i = 0; i < buf.length; i++) {
+            let c = buf[i];
+            if (c == 0xA) {
+                if (!line.length) {
+                    body = true;
+                    res.writeHead(statusCode || 200, reason);
+                    res.write(buf.slice(i+1));
+                    return;
+                }
+
+                let s = line.join('');
+                line = [];
+                if (!statusCode) {
+                    let m = statusExp.exec(s);
+                    if (m) {
+                        statusCode = m[1];
+                        reason = m[2];
+                        continue;
+                    }
+                }
+                let idx = s.indexOf(':');
+                res.setHeader(s.slice(0, idx), s.slice(idx+1).trim());
+            }
+            else if (c != 0xD)
+                line.push(String.fromCharCode(c));
+        }
+    });
+
+    req.pipe(child.stdin);
+    req.resume();
+}
+
+readOptions().then((options) => {
+    const server = http.createServer((req, res) => {
+        let url = URL.parse(req.url);
+
+        try {
+            // Index: public view of the site.
+            if (url.pathname == "/") handleIndex(req, res);
+
+            else if (url.pathname == "/logo") handleLogoReq(req, res);
+            
+            // Style: local stylesheet
+            else if (url.pathname == "/style") handleStyleReq(req, res);
+
+            // Private section
+            else if (url.pathname == "/priv") handlePrivIndex(options, req, res);
+
+            // Allow to pull some static from posts.
+            else if (url.pathname.startsWith("/posts")) handlePostsReq(req, res);
+
+            // Handle git HTTP CGI
+            else if (url.pathname.startsWith("/git")) handleGitReq(req, res);
+
+            // Add an URL to the list of followers.
+            else if (url.pathname == "/follow") handleFollowReq(options, req, res);
+
+            // Remove an URL from the list of followers
+            else if (url.pathname == "/unfollow") handleUnfollowReq(req, res);
+
+            // Ping, technically from one of the servers we follow.
+            else if (url.pathname == "/ping") handlePingReq(req, res);
+
+            // Key lookup.
+            else if (url.pathname == "/key") handleKeyReq(req, res);
+
+            else {
+                res.writeHead(404);
+                res.end(`Unable to handle request to ${req.url}\n`);
+            }
+        } catch (ex) {
+            console.log(ex);
+
+            res.writeHead(500);
+            res.end(ex);
+        }
+    });
+
+    checkFollowing();
+    
+    // Watch the 'following' file for changes, if it exists.
+    fs.access("following")
+        .then(() => {
+            fsL.watchFile("following", () => {
+                checkFollowing();
+            });
+        })
+        .catch(() => {
+            // Nevermind.
+        });
+   
+    console.log(`Listening on ${options.hostname}:${options.port}`);
+    server.listen(options.port, options.hostname);    
+});

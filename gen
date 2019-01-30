@@ -1,0 +1,337 @@
+#!/usr/bin/env node
+
+const markdown = require("./lib/markdown-it.js")();
+const mustache = require("./lib/mustache.js");
+const fs = require("fs").promises;
+const path = require("path");
+
+class Comment {
+    constructor(commentFile) {
+        this.commentFile = commentFile;
+        this.commentContent = null;
+    }
+
+    load() {
+        return new Promise((resolve, reject) => {
+            fs.readFile(this.commentFile)
+                .then((content) => {
+                    this.commentContent = markdown.render(content.toString());
+                    resolve(this);
+                })
+                .catch((err) => {
+                    // TODO: Handle this error gracefully.
+                    resolve(this);
+                });
+        });
+    }
+}
+
+class Post {
+    constructor(indexFile) {
+        this.indexFile = indexFile;
+        this.indexContent = null;
+        this.indexTimestamp = null;
+        this.comments = [];
+    }
+    
+    commentPath() {
+        return path.join(path.dirname(this.indexFile), "comments");
+    }
+
+    readPost() {
+        return new Promise((resolve, reject) => {
+            fs.readFile(this.indexFile)
+                .then((content) => {
+                    this.indexContent = markdown.render(content.toString());
+                    resolve(this);
+                })
+                .catch((err) => {
+                    // TODO: Handle this error gracefully.
+                    resolve(this);
+                });
+        });
+    }
+
+    readTimestamp() {
+        return new Promise((resolve, reject) => {
+            fs.lstat(this.indexFile)
+                .then((stat) => {
+                    this.indexTimestamp = stat.ctime;
+                    resolve(this);
+                })
+                .catch((err) => {
+                    // TODO: Handle this error gracefully.
+                    resolve(this);
+                });
+        });
+    }
+
+    listComments() {
+        return new Promise((resolve, reject) => {
+            fs.readdir(this.commentPath())
+                .then((commentFiles) => {
+                    commentFiles.forEach((commentFile) => {
+                        this.comments.push(new Comment(path.join(this.commentPath(), commentFile)));
+                    });
+                    resolve(this);
+                })
+                .catch((err) => {
+                    // TODO: Handle this error gracefully.
+                    resolve(this);
+                });
+        });
+    }
+
+    loadComments() {
+        let p = [];
+        
+        this.comments.forEach((comment) => {
+            p.push(comment.load());
+        });
+
+        return Promise.all(p);
+    }
+
+    load() {
+        return new Promise((resolve, reject) => {
+            this.readPost()
+                .then(() => {
+                    return this.listComments();
+                })
+                .then(() => {
+                    return this.loadComments();
+                })
+                .then(() => {
+                    return this.readTimestamp();
+                })
+                .then(() => {
+                    resolve(this);
+                });
+        });
+    }
+}
+
+class Repository {    
+    constructor(baseDir, email = null) {
+        // Post objects
+        this.posts = [];
+        this.baseDir = baseDir;
+
+        // This is only set for external repositories.
+        this.email = email;
+        
+        // Privates.
+        this._postDirs = [];
+    }
+
+    _listPostDirs() {
+        return new Promise((resolve, reject) => {
+            fs.readdir(path.join(this.baseDir, "posts"))
+                .then((postDirs) => {
+                    this._postDirs = postDirs.reverse();
+                    resolve(this);
+                })
+                .catch((err) => {
+                    // TODO: Handle this error.
+                    resolve(this);
+                });
+        });
+    }
+
+    _listRealPosts() {
+        let p = [];
+        
+        this._postDirs.forEach((postDir) => {
+            p.push(new Promise((resolve, reject) => {
+                let postIdxFile = path.join(this.baseDir, "posts", postDir, "index.md");
+                fs.access(postIdxFile)
+                    .then(() => {
+                        this.posts.push(new Post(postIdxFile));
+                        resolve();
+                    })
+                    .catch((err) => {
+                        // No need to handle this error, we'll consider this post
+                        // doesn't exists
+                        // TODO: Perhaps the error should be logged.
+                        resolve();
+                    });
+            }));
+        });
+
+        return new Promise((resolve, reject) => {
+            Promise.all(p).then(() => {
+                resolve(this);
+            });
+        });
+    }
+    
+    load() {
+        return new Promise((resolve, reject) => {
+            this._listPostDirs()
+                .then(() => {
+                    return this._listRealPosts();
+                })
+                .then(() => {
+                    let p = [];
+
+                    this.posts.forEach((post) => {
+                        p.push(post.load());
+                    });
+
+                    Promise.all(p).then(() => {
+                        resolve();
+                    });
+                });
+        });
+    }
+}
+
+class GitSocial {
+    constructor() {
+        this.local = new Repository(".");
+        this.remotes = [];
+        this.followers = [];
+        this.following = [];
+    }
+
+    _loadData(fname) {
+        return new Promise((resolve, reject) => {
+            let r = [];
+            
+            fs.readFile(fname)
+                .then((data) => {
+                    let strData = data.toString().trim();
+                    let dataLines = strData.split("\n");
+
+                    dataLines.forEach((dataLine) => {
+                        if (dataLine == "") return;
+                        
+                        let dataItems = dataLine.split(" ");
+                        r.push({
+                            email: dataItems[0],
+                            url: dataItems[1],
+                            keyid: dataItems[2]
+                        });
+                    });
+
+                    resolve(r);
+                })
+                .catch(() => {
+                    resolve([]);
+                });            
+        });       
+    }
+
+    _loadRemotes() {
+        let p = [];
+        
+        this.following.forEach((following) => {
+            let repoDir = `repos/${following.email}`;
+            
+            p.push(new Promise((resolve, reject) => {
+                fs.access(`${repoDir}/posts`)
+                    .then(() => {
+                        let repo = new Repository(repoDir, following.email);
+                        this.remotes.push(repo);
+                        return repo.load();
+                    })
+                    .then(() => {
+                        resolve(this);
+                    })
+                    .catch(() => {
+                        resolve(this);
+                    });
+            }));
+        });
+
+        return Promise.all(p);
+    }                              
+    
+    load() {
+        return Promise.all([
+            this._loadData("data/following"),
+            this._loadData("data/followers"),
+        ]).then((values) => {
+            this.following = values[0];
+            this.followers = values[1];
+            
+            return Promise.all([
+                this._loadRemotes(),
+                this.local.load()
+            ]);                                   
+        });
+    }
+}
+
+function renderPublicPosts(repository, title, template, partials) {    
+    let p = [];
+
+    return new Promise((resolve, reject) => {      
+        // Gather the content of all posts and comments.
+        repository.posts.forEach((post) => {
+            p.push(post.load());
+        });
+
+        // Render them all together.
+        Promise.all(p).then((posts) => {        
+            resolve(mustache.render(template, {
+                title: title,
+                posts: repository.posts,
+                hasLocalPosts: repository.posts.length > 0
+            }, partials));
+        });
+    });
+}
+
+function renderAllPosts(gitSocial, title, template, partials) {
+    return new Promise((resolve, reject) => {
+        resolve(mustache.render(template, {
+            title: title,
+            hasLocalPosts: gitSocial.local.posts.length > 0,
+            hasFollowings: gitSocial.following.length > 0,
+            gitSocial: gitSocial
+        }, partials));
+    });
+}
+
+(async () => {
+    let publicTemplate, privateTemplate, reposTemplate, reloadTemplate, title;
+
+    let gs = new GitSocial();
+
+    Promise.all([
+        fs.readFile("scripts/templates/index.mustache"),
+        fs.readFile("scripts/templates/private.mustache"),
+        fs.readFile("scripts/templates/repos.mustache"),
+        fs.readFile("scripts/templates/reload.mustache"),
+        fs.readFile("config/title")
+    ]).then((values) => {
+        publicTemplate = values[0].toString(),
+        privateTemplate = values[1].toString(),
+        reposTemplate = values[2].toString(),
+        reloadTemplate = values[3].toString(),
+        title = values[4].toString().trim();
+
+        return gs.load();
+    }).then(() => {
+        return Promise.all([
+            renderPublicPosts(gs.local, title, publicTemplate, {
+                repos: reposTemplate,
+                reload: reloadTemplate
+            }),
+            renderAllPosts(gs, title, privateTemplate, {
+                repos: reposTemplate,
+                reload: reloadTemplate
+            })
+        ]);
+    }).then((values) => {
+        return Promise.all([
+            fs.writeFile("public/index.html", values[0]),
+            fs.writeFile("public/priv.html", values[1])
+        ]);
+    });
+/*        .catch((err) => {
+            console.log("Error: " + err);
+        });*/
+
+})();

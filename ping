@@ -1,0 +1,23 @@
+#!/bin/bash
+
+# Ping a single follower
+ping() {
+    if grep ${1} data/followers > /dev/null; then
+        echo "Pinging ${1}"
+        curl -q ${1}ping?url=${hostname}
+    else
+        echo "Not being followed by ${1}"
+    fi    
+}
+
+hostname=$(cat config/hostname):$(cat config/port)
+
+if [[ "${1}" == "all" ]]; then
+    followers=$(cat data/followers | cut -f 2 -d ' ')
+    for follower in ${followers}; do
+        ping ${follower}
+    done    
+else
+    ping ${1}
+fi
+

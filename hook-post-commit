@@ -1,0 +1,5 @@
+#!/bin/bash -x
+
+git --git-dir .git --work-tree . reset --hard
+scripts/gen
+scripts/ping all

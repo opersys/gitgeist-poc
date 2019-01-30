@@ -1,0 +1,56 @@
+body {
+    margin: auto;
+    margin-top: 1em;
+    width: 50%;
+    font-family: sans-serif;
+}
+
+p {
+    margin: 0;
+    padding: 0;
+}
+
+.logo > h1 {
+    display: inline-block;
+    vertical-align: middle;
+}
+
+.logo > img {
+    display: inline-block;
+    vertical-align: middle;    
+}
+
+div.posts {
+}
+
+div.post {
+    border-width: 1px;
+    border-color: gray;
+    border-style: solid;
+    margin: 2px;    
+}
+
+div.post > div.content {
+    padding-left: 10px;
+    padding-right: 10px;
+    margin-top: 10px;
+    margin-bottom: 30px;   
+}
+
+div.post > div.timestamp {
+    font-size: x-small;
+    text-align: right;
+    margin-bottom: 10px;
+    padding-right: 2px;
+}
+
+div.post div.comments {
+    background-color: lightgray;
+}
+
+div.post div.comments div.content {
+    padding-left: 50px;
+    padding-top: 8px;
+    padding-bottom: 8px;
+    font-size: smaller;
+}

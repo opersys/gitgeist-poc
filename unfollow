@@ -1,0 +1,33 @@
+#!/bin/bash -x
+
+# Request an unfollow from the target
+IFS=""
+hostname=$(cat config/hostname):$(cat config/port)
+key=$(curl -s ${1}/unfollow?url=http://${hostname})
+
+if grep ${1} data/following 2> /dev/null; then
+    email=$(echo $key \
+                | gpg --with-colons 2> /dev/null \
+                | grep ^uid \
+                | cut -d '<' -f 2 \
+                | tr -d '>:')
+    keyid=$(echo $key \
+                | gpg --with-colons --with-fingerprint 2> /dev/null \
+                | grep -E "^fpr"\
+                | tr -d 'fpr:::::::::');
+    
+    if [[ ${email} != "" && ${keyid} != "" ]]; then
+        tmp=$(mktemp)
+        grep -v "${email} ${1} ${keyid}" data/following > ${tmp}
+        mv ${tmp} data/following
+        scripts/gen
+        exit 0        
+    else
+        echo "Error removing following for ${1}"
+        exit 1
+    fi
+else
+    echo "Not following ${1}"
+    exit 1
+fi
+    

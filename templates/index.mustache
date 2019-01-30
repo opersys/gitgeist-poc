@@ -1,0 +1,21 @@
+<html>
+  <head>
+    <title>{{title}}</title>
+    <link rel="stylesheet" type="text/css" href="/style">
+    {{> reload}}
+  </head>
+  
+  <body>
+    <div class="logo">
+      <img src="/logo">
+      <h1 class="title">{{title}}</h1>
+    </div>
+    
+      {{^hasLocalPosts}}     
+        <h2>No local content yet</h2>
+      {{/hasLocalPosts}}
+
+      {{> repos}}
+      
+  </body>
+</html>

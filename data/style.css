@@ -10,14 +10,9 @@ p {
     padding: 0;
 }
 
-.logo > h1 {
-    display: inline-block;
-    vertical-align: middle;
-}
-
-.logo > img {
-    display: inline-block;
-    vertical-align: middle;    
+img.logo {
+    display: block;
+    float: right;
 }
 
 div.posts {

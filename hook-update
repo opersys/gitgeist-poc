@@ -47,9 +47,10 @@ for commit in $span; do
         exit 0
     fi
 
-    signing_keyid=$(gpg --with-colons --with-fingerprint --list-keys \
+    signing_keyid=$(gpg --with-colons --with-fingerprint --list-public-keys \
                         $(git show --no-patch --format=%GK "$commit") \
                         | grep fpr \
+                        | head -1 \
                         | cut -d ':' -f 10 \
                         | tr -d ' ')
 
@@ -62,7 +63,7 @@ for commit in $span; do
 
     if [ ! -z "$signing_keyid" ]; then
         # Look for the signing key in data/followers
-        grep $signing_keyid ../data/followers
+        grep $signing_keyid ../data/followers 2> /dev/null
         if [ $? != 0 ]; then
             echo "$signing_keyid not local key nor in followers"
             exit 1

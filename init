@@ -70,3 +70,5 @@ ln -fs $(pwd)/scripts/hook-update $(pwd)/.git/hooks/update
 ln -fs $(pwd)/scripts/hook-post-update $(pwd)/.git/hooks/post-update
 ln -fs $(pwd)/scripts/hook-post-commit $(pwd)/.git/hooks/post-commit
 
+# Generate the first page
+scripts/gen

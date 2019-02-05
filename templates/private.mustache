@@ -10,24 +10,24 @@
       {{/hasFollowings}}
     
       {{#hasFollowings}}
-        {{#gitSocial.following}}
+        {{#gg.following}}
           <a href="/priv#{{email}}">{{email}}</a>
-        {{/gitSocial.following}}
+        {{/gg.following}}
       {{/hasFollowings}}
       <a href="/priv#local">Local posts</a>
 
       <hr />
       
-      {{#gitSocial.remotes}}
+      {{#gg.remotes}}
         <div class="remotePosts">
           <h3><a name="{{email}}">{{email}}</a></h3>
           {{> repos}}
         </div>
-      {{/gitSocial.remotes}}
+      {{/gg.remotes}}
 
-      {{#gitSocial.local}}
+      {{#gg.local}}
         <h3><a name="local">Local posts</a></h3>
         {{> repos}}
-      {{/gitSocial.local}}
+      {{/gg.local}}
   </body>
 </html>

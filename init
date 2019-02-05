@@ -37,7 +37,7 @@ echo $2 > config/port
 echo $3 > config/email
 echo $4 > config/user
 echo $5 > config/password
-echo "A GitSocial site" > config/title
+echo "A gitgeist site" > config/title
 
 # Export the key we'll use for this repository.
 if [[ ! -f data/key.gpg ]]; then

@@ -186,7 +186,7 @@ class Repository {
     }
 }
 
-class GitSocial {
+class gitgeist {
     constructor() {
         this.local = new Repository(".");
         this.remotes = [];
@@ -267,6 +267,11 @@ function renderPublicPosts(repository, title, template, partials) {
     let p = [];
 
     return new Promise((resolve, reject) => {      
+        // Gather the content of all posts and comments.
+        repository.posts.forEach((post) => {
+            p.push(post.load());
+        });
+
         // Render them all together.
         Promise.all(p).then((posts) => {        
             resolve(mustache.render(template, {
@@ -278,13 +283,13 @@ function renderPublicPosts(repository, title, template, partials) {
     });
 }
 
-function renderAllPosts(gitSocial, title, template, partials) {
+function renderAllPosts(gitgeist, title, template, partials) {
     return new Promise((resolve, reject) => {
         resolve(mustache.render(template, {
             title: title,
-            hasLocalPosts: gitSocial.local.posts.length > 0,
-            hasFollowings: gitSocial.following.length > 0,
-            gitSocial: gitSocial
+            hasLocalPosts: gitgeist.local.posts.length > 0,
+            hasFollowings: gitgeist.following.length > 0,
+            gg: gitgeist
         }, partials));
     });
 }
@@ -292,7 +297,7 @@ function renderAllPosts(gitSocial, title, template, partials) {
 (async () => {
     let publicTemplate, privateTemplate, reposTemplate, reloadTemplate, title;
 
-    let gs = new GitSocial();
+    let gs = new gitgeist();
 
     Promise.all([
         fs.readFile("scripts/templates/index.mustache"),

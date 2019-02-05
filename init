@@ -10,7 +10,7 @@ port=${2}
 email=${3}
 nokey=1
 
-keyemails=$(gpg --list-keys 2> /dev/null | grep ^uid 2> /dev/null | perl -ne '/<(.*)>/ && print $1')
+keyemails=$(gpg --list-keys 2> /dev/null | grep ^uid 2> /dev/null | perl -ne '/<(.*)>/ && print $1."\n"')
 
 if [[ -z "${keyemails}" ]]; then
     echo "No GPG keys. You need to create at least one."

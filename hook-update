@@ -42,9 +42,14 @@ fi
 for commit in $span; do
     verify_sig=$(git verify-commit --raw "$commit" 2>&1)
 
-    if [ -z "$verify_sig" -a -f "../data/insecure" ]; then
-        echo "This commit is unsigned but accepting anyway as you desire ('data/insecure' exists.)"
-        exit 0
+    if [[ -z "$verify_sig" ]]; then
+        if [[ -f "../data/insecure" ]]; then
+            echo "Commit $commit is unsigned but accepting anyway, as directed ('data/insecure' exists.)"
+            continue
+        else
+            echo "Commit $commit is unsigned. Not accepting unsigned commits."
+            exit 1
+        fi
     fi
 
     signing_keyid=$(gpg --with-colons --with-fingerprint --list-public-keys \
@@ -57,6 +62,7 @@ for commit in $span; do
     echo "Signing key ID: " $signing_keyid >&2
 
     # Check if it's the local keyid.
+    # The local key id is allowed to do anything.
     if [ "$signing_keyid" = "$local_keyid" ]; then
         continue
     fi
@@ -68,6 +74,30 @@ for commit in $span; do
             echo "$signing_keyid not local key nor in followers"
             exit 1
         fi
+
+        # Validate the path the follower is trying to modify.
+        new_commits=$(git rev-list ${rev_old}..${rev_new})
+        for new_commit in $new_commits; do
+            files_modified=$(git log -1 --name-only --pretty=format:'' $new_commit)
+
+            for file_modified in $files_modified; do
+                # Check that it's inside a 'comments' directory under
+                # the 'posts' directory.
+                if [[ $file_modified != posts/*/comments/* ]]; then
+                    echo "Followers not allowed to modify files outside the 'comments' directory inside a post."
+                    exit 1
+                fi
+
+                # The file modified must be in the 'posts' hierarchy
+                # and must exists.
+                if [[ $(git ls-tree -r master $(dirname $(dirname $file_modified)) | wc -l) == 0 ]]; then
+                    echo "Followers not allowed to create $(dirname $(dirname $file_modified))"
+                    exit 1
+                fi
+            done
+        done
+
+        exit 0
     fi
 done
 

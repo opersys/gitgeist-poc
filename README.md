@@ -8,6 +8,44 @@ Posts and comments are stored in a Git repository which is used by the engine to
 
 You need a fairly recent (10.x) version of Node.js in order to use gitgeist. Recent version of Git and GPG are also recommended.
 
+## Quickstart
+
+This is a very quick and dirty way to get started testing gitgeist. 
+
+Clone the Git repository with gitgeist source code.
+
+    $ git clone [URL] gitgeist
+
+Create a directory to host your content
+
+	$ mkdir blog
+	
+Symlink the gitgeist scripts to the directory for easy access
+	
+    $ ln -s ~/gitgeist .
+    
+Initialize the repository
+
+    $ scripts/init localhost 9001 your.email@address.com test test
+    
+Start the HTTP server
+
+    $ scripts/server
+      
+At this point, you can browse the currently empty site at http://localhost:9001. 
+
+To create new content (without shutting down the HTTP server)
+   
+    $ git clone http://localhost:9001/git ggeist-local
+    $ cd ggeist-local
+    $ mkdir -p posts/0001
+    $ echo "This is new content! w00t" > posts/0001/index.md
+    $ git add posts
+    $ git commit -S -m "First post"
+    $ git push
+        
+You should automatically see the browser update itself with the new content you've just created.
+        
 ## Starting
 
 Clone the gitgeist Git repository somewhere on your host disk. This repository contains what is required to generate a gitgeist instance 
@@ -127,4 +165,33 @@ Once you push is accepted by the server, it will appear as a comment below the p
 
 gitgeist does not make public the posts it gathers from the repositories you follow. To view the posts of all the nodes you are following, you can access the *priv* path in your URL.
 
-This page will be protected with basic HTTP authentication and the username and passwords that you've set when you've initialised the repository.
+This page will be protected with basic HTTP authentication and the username and passwords that you've set when you've initialised the repository
+
+## Technical reference
+
+#### HTTP Endpoints
+
+gitgeist server offers a few HTTP API endpoints that is used to access some of the feature of the node or to allow communication between nodes.
+
+|Endpoint|Description|
+|--------|-----------|
+|ping    | Needs an *url* parameter. When received, this makes the node  pull from the Git repository at *url* provided that it is currently followed by the target node|
+|key     |Return the GPG public key that uniquely identify this server|
+|git     |Exposes the underlying Git repository to other nodes or users. Can be pushed to with signed commits.|
+|follow  |Needs an *url* parameter. Sent by nodes that desire to be informed of updates. Commits by the node user needs to be signed by the private key corresponding to the node's public GPG key. (See the /key endpoint)|
+|unfollow|Needs an *url* parameter. Sent by nodes that no longer desire to be informed of updates|
+|priv    |Private user section of the site, controlled by HTTP Basic authentication|
+|logo    |Returns the content of logo.png in the root of the Git repository. Allows for customization of the site logo.|
+|style   |Returns the content of style.css in the root of the Git repository. Allows for the customization of the site style.|
+|posts   |Allows for posts to refer to content stored under the /posts directory in the Git directory|
+
+
+### Git Hooks
+
+|Hook name|Effect|
+|---------|------|
+|update|Valide the GPG signature of the commits. Validate that the commits pushed to the node are allowed.|
+|post-update|Update the page using the content of the Git repository. Advertise to followers that the repository has changed.
+|post-commit|Update the page using the content of the Git repository. Advertise to followers that the repository has changed.|
+
+

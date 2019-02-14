@@ -108,6 +108,10 @@ The ID of the GPG key is an long string of hexadecimal characters.
     
 The ID of the GPG key to use here is 82B0C739018B95F302C183344D886CDB7892496A
 
+The *getkeyid* script that is automatically included in the initial cloned repository may do that job for you. *getkeyid* returns the ID of the key corresponding to the email you ended as an argument. Assuming your run the [GNU Bash shell](https://www.gnu.org/software/bash/) (or a [variant thereof](http://www.zsh.org/)), you can use it that way in the *git* command line.
+
+    $ git config user.signingkey $(./getkeyid your.email@address.com)
+
 To post a new entry, you need to create a new directory in the 'posts' directory on the host. The name of the directory matters if you want your post to appear in a logical order. We recommend to prepend the directory name with a post number, ex: *0001-HelloWorld*, *0002-SecondPost*. In this example, the post numbered 0002 would appear before the post numbered 0001 on the node public page.
 
 The post content must be be called index.md and be written in the Markdown

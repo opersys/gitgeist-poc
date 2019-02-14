@@ -267,11 +267,6 @@ function renderPublicPosts(repository, title, template, partials) {
     let p = [];
 
     return new Promise((resolve, reject) => {      
-        // Gather the content of all posts and comments.
-        repository.posts.forEach((post) => {
-            p.push(post.load());
-        });
-
         // Render them all together.
         Promise.all(p).then((posts) => {        
             resolve(mustache.render(template, {

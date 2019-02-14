@@ -58,10 +58,12 @@ touch data/following
 touch .git/git-daemon-export-ok
 cp scripts/data/style.css .
 cp scripts/data/logo.png .
+cp scripts/getkeyid .
 
 git add posts
 git add following
 git add style.css
+git add getkeyid
 
 git commit -m "Initialisation commit."
 

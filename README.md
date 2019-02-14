@@ -10,7 +10,7 @@ You need a fairly recent (10.x) version of Node.js in order to use gitgeist. Rec
 
 ## Quickstart
 
-This is a very quick and dirty way to get started testing gitgeist. 
+This is a very quick and dirty way to get started testing gitgeist. It assumes you have a GPG key with an email associated to a certain email address (here represented by your.email@address.com)
 
 Clone the Git repository with gitgeist source code.
 
@@ -26,25 +26,30 @@ Symlink the gitgeist scripts to the directory for easy access
     
 Initialize the repository
 
-    $ scripts/init localhost 9001 your.email@address.com test test
+    $ scripts/init localhost 9005 your.email@address.com test test
     
 Start the HTTP server
 
     $ scripts/server
       
-At this point, you can browse the currently empty site at http://localhost:9001. 
+At this point, you can browse the currently empty site at http://localhost:9005. 
+
+![Quickstart - empty site](images/quickstart1.png)
 
 To create new content (without shutting down the HTTP server)
    
     $ git clone http://localhost:9001/git ggeist-local
     $ cd ggeist-local
+    $ git config user.signingkey $(./getkeyid your.email@address.com)
     $ mkdir -p posts/0001
-    $ echo "This is new content! w00t" > posts/0001/index.md
+    $ echo 'This is new content! w00t' > posts/0001/index.md
     $ git add posts
     $ git commit -S -m "First post"
     $ git push
         
 You should automatically see the browser update itself with the new content you've just created.
+
+![Quickstart - new post](images/quickstart2.png)
         
 ## Starting
 
@@ -130,7 +135,11 @@ The post can include images or other binaries files. In order to be linked prope
 For example, if you want to insert an image called image.png in your
 post, here is what you must do:
 
-    ![Image](/posts/0001/image.png)
+    ![Image](/posts/0001/image.jpg)
+
+Here is an example in context:
+
+![Image](images/with_image.png)
 
 ## Following & Unfollowing
 
@@ -144,28 +153,34 @@ You can directly modify this file on the host. You can also remotely push commit
 
 ## Commenting
 
-*Commenting will not demanding pushing to third party Git repositories in the future. The current state of the implementation is temporary.*
-
 Following someone gives allows you to comment on other people's post through their Git repository.
 
 The only difference there is between creating a new posts in your own repository and commenting in a third-party repository is that, in the latter case, you are only allowed to add content in a *comments* directory under the posts you want to comment to.
 
-Supposing http://localhost:9002 is a third party repository that I'm following. In order to comment on post *0001*, I can create a *comments* directory within the directory of that posts.
+Supposing http://localhost:9005 is a third party repository that I'm following. In order to comment on post *0001*, I can create a *comments* directory within the directory of that posts.
 
-    $ git clone http://localhost:9002/git git-comments
+    $ git clone http://localhost:9005/git git-comments
     $ cd git-comments
+    $ git config user.signingkey $(./getkeyid your.email@address.com)
     $ mkdir -p posts/0001/comments
     $ echo "hello this is a comment" > posts/0001/comments/hello.md
     $ git add posts/0001
+    $ git commit -m "Added comment" -S
     $ git push
     
 Once you push is accepted by the server, it will appear as a comment below the post that you've selected. Comments are not ordered yet and will show up in filesystem order.
+
+![Comments](images/with_comments.png)
 
 ## Private section
 
 gitgeist does not make public the posts it gathers from the repositories you follow. To view the posts of all the nodes you are following, you can access the *priv* path in your URL.
 
-This page will be protected with basic HTTP authentication and the username and passwords that you've set when you've initialised the repository
+This page will be protected with basic HTTP authentication and the username and passwords that you've set when you've initialised the repository.
+
+The following example shows what it is like to follow another site in the private section.
+
+![Private](images/private_section.png)
 
 ## Technical reference
 

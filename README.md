@@ -14,15 +14,19 @@ This is a very quick and dirty way to get started testing gitgeist. It assumes y
 
 Clone the Git repository with gitgeist source code.
 
-    $ git clone [URL] gitgeist
+    $ git clone https://github.com/opersys/gitgeist-poc.git gitgeist
 
 Create a directory to host your content
 
 	$ mkdir blog
 	
-Symlink the gitgeist scripts to the directory for easy access
+Change to the blog directory to start working.
+
+    $ cd blog
+
+Symlink the gitgeist scripts to the directory for easy access. We presume the checkout of gitgeist is in the same directory as the *blog* directory.
 	
-    $ ln -s ~/gitgeist .
+    $ ln -s ../gitgeist scripts
     
 Initialize the repository
 
@@ -36,9 +40,9 @@ At this point, you can browse the currently empty site at http://localhost:9005.
 
 ![Quickstart - empty site](images/quickstart1.png)
 
-To create new content (without shutting down the HTTP server)
+To create new content without shutting down the HTTP server, open a new terminal and use those commands.
    
-    $ git clone http://localhost:9001/git ggeist-local
+    $ git clone http://localhost:9005/git ggeist-local
     $ cd ggeist-local
     $ git config user.signingkey $(./getkeyid your.email@address.com)
     $ mkdir -p posts/0001
@@ -53,13 +57,15 @@ You should automatically see the browser update itself with the new content you'
         
 ## Starting
 
+This section will develop on the quickstart section by describing the purpose of the commands that were not explained above.
+
 Clone the gitgeist Git repository somewhere on your host disk. This repository contains what is required to generate a gitgeist instance 
 
-    $ git clone 
+    $ git clone https://github.com/opersys/gitgeist-poc.git gitgeist
 
-The script directory can be directly used in your hosting directory but in order to facilate sharing the code accross instances, we recommend creating *scripts* as a symbolic link inside the .
+The script directory can be directly used in your hosting directory but in order to facilate sharing the code accross instances, we recommend creating *scripts* as a symbolic link inside the target blog directory.
 
-    $ ln -s ../scripts
+    $ ln -s ../gitgeist scripts
 
 The scripts directory includes all the commands needed to initialize a gitgeist node.
 
@@ -67,7 +73,7 @@ Prior to executing the initialisation of the node Git repository, you need to ma
 
 The 'init' script will initialize a target directory with the files required for a gitgeist node to run.
 
-    $ scripts/init
+    $ scripts/init hostname port email username password
 
 The 'init' script require 5 parameters to initialize the node
 
@@ -154,6 +160,13 @@ You can follow another gitgeist node once you know it's URL. In the root of the 
 The gitgeist server monitors changes to this file to track the URLs of the host it follows. Adding and removing URLs from this list will make the server follow or unfollow those URLs.
 
 You can directly modify this file on the host. You can also remotely push commits modifying the file for the same effect.
+
+    $ echo "http://localhost:9005" >> following
+    $ git add following
+    $ git commit -m "New follower: localhost:9005"
+    $ git push
+
+This remotely adds a new follower to the target server. A few seconds after the change is noticed, the target server will clone the remote repository and make its content accessible in the private section of the website.
 
 ## Commenting
 

@@ -1,6 +1,6 @@
 # gitgeist proof-of-concept user manual
 
-gitgeist is a new kind of social network that uses Git has a storage backend and transfer protocol.
+gitgeist is a new kind of social network that uses Git as a storage backend and transfer protocol.
 
 Posts and comments are stored in a Git repository which is used by the engine to generate a static web page that is served over HTTP by Node.js­
 

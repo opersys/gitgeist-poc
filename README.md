@@ -60,7 +60,7 @@ Cloning the gitgeist Git repository somewhere on your host gives you what you ne
 
     $ git clone https://github.com/opersys/gitgeist-poc.git gitgeist
 
-The script directory can be directly used in your hosting directory. In order to facilate sharing the code accross instances, though, we recommend creating *scripts* as a symbolic link inside the target blog directory.
+The script directory can be directly used in your hosting directory. In order to facilitate sharing the code accross instances, though, we recommend creating *scripts* as a symbolic link inside the target blog directory.
 
     $ ln -s ../gitgeist scripts
 

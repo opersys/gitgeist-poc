@@ -219,4 +219,8 @@ The gitgeist server offers a few HTTP API endpoints that are used to access some
 |post-update|Update the page using the content of the Git repository. Advertise to followers that the repository has changed.
 |post-commit|Update the page using the content of the Git repository. Advertise to followers that the repository has changed.|
 
+# Architecture
+
+![Architecture](images/Architecture.png)
+
 

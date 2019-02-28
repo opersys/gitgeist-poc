@@ -14,7 +14,7 @@ function regenerate() {
         console.log("Regenerating index page");
 
         let gen = spawn("scripts/gen", []);
-        
+
         gen.on("close", (code) => {
             if (code == 0)
                 resolve();
@@ -46,7 +46,7 @@ function cloneFollower(follower) {
                         console.log(err);
                     else
                         console.log("Failed page regeneration after git clone");
-                    
+
                     // Failed generation does not invalide the clone.
                     resolve();
                 });
@@ -95,7 +95,7 @@ function remoteUnfollow(targetUrl) {
         unfollowScript.on("error", (err) => {
             reject(err);
         });
-    });    
+    });
 }
 
 function updateFollower(follower) {
@@ -129,7 +129,7 @@ function checkFollowing() {
                                       .map((s) => {return s.trim();}));
 
         for (let userFollowsUrl of userFollowsUrls) {
-            if (!isFollowing(storedFollows, userFollowsUrl)) {               
+            if (!isFollowing(storedFollows, userFollowsUrl)) {
                 // Trigger the follow process.
                 remoteFollow(userFollowsUrl)
                     .then(() => {
@@ -137,17 +137,17 @@ function checkFollowing() {
                     })
                     .catch(() => {
                         console.log(`Failed to add follow URL: ${userFollowsUrl}`);
-                    });                
+                    });
             }
         }
 
         // Scan the currently stored following URLs to see if one was removed.
         for (let storedFollow of storedFollows) {
             if (!userFollowsUrls.has(storedFollow.url)) {
-                // Trigger the unfollow process.                
+                // Trigger the unfollow process.
                 remoteUnfollow(storedFollow.url)
                     .then(() => {
-                        console.log(`Removed follow URL: ${storedFollow.url}`);                        
+                        console.log(`Removed follow URL: ${storedFollow.url}`);
                     })
                     .catch(() => {
                         console.log(`Failed to remove follow URL: ${storedFollow.url}`);
@@ -157,47 +157,58 @@ function checkFollowing() {
     });
 }
 
-function gpgGetKeyData(keyData, callback) {
+function gpgGetKeyData(keyData) {
+    let gpgpBins = ["gpg", "gpg2"];
+
     return new Promise((resolve, reject) => {
-        let gpg = spawn("gpg", ["--with-fingerprint", "--with-colons"], {
-            shell: true,
-            stdio: ['pipe', 'pipe', process.stderr]
-        });
-        let output = "";
-        let email = "";
-        let keyid = "";
+        let gpgBin = gpgBins.pop();
 
-        gpg.stdout.on("data", (chunk) => {
-            output += chunk.toString();
-        });
+        while (gpgBins) {
+            let gpg = spawn(gpgBin, ["--with-fingerprint", "--with-colons"], {
+                shell: true,
+                stdio: ['pipe', 'pipe', process.stderr]
+            });
+            let output = "";
+            let email = "";
+            let keyid = "";
 
-        gpg.on("exit", () => {
-            let gpgLines = output.split("\n");
+            gpg.stdout.on("data", (chunk) => {
+                output += chunk.toString();
+            });
 
-            for (let line of gpgLines) {
-                if (line.startsWith("pub"))
-                    email = line.substring(line.indexOf("<") + 1, line.length - 2);
-                else if (line.startsWith("fpr:::::::::"))
-                    keyid = line.substring(12, line.length - 1).trim();
-            }
+            gpg.on("exit", () => {
+                let gpgLines = output.split("\n");
 
-            if (email == null || email == "")
-                reject(new Error("email cannot be null or empty"));
-            if (keyid == null || keyid == "")
-                reject(new Error("keyid cannot be null or empty"));
-            
-            resolve(email, keyid);
-        });
+                for (let line of gpgLines) {
+                    if (line.startsWith("pub"))
+                        email = line.substring(line.indexOf("<") + 1, line.length - 2);
+                    else if (line.startsWith("fpr:::::::::"))
+                        keyid = line.substring(12, line.length - 1).trim();
+                }
 
-        gpg.on("error", (err) => {
-            reject(err);
-        });
+                if (email == null || email == "")
+                    reject(new Error("email cannot be null or empty"));
+                if (keyid == null || keyid == "")
+                    reject(new Error("keyid cannot be null or empty"));
 
-        gpg.stdin.end(keyData);       
+                resolve(email, keyid);
+            });
+
+            gpg.on("error", (err) => {
+                console.log(`Executing ${gpgBin} failed, trying another name`);
+
+                if (gpgBins)
+                    gpgBin = gpgBins.pop();
+                else
+                    reject(err);
+            });
+
+            gpg.stdin.end(keyData);
+        }
     });
 }
 
-function readNodeDataFile(filename, callback) {
+function readNodeDataFile(filename) {
     return new Promise((resolve, reject) => {
         // Open the following file.
         let fin = fsL.createReadStream(filename);
@@ -225,7 +236,7 @@ function readNodeDataFile(filename, callback) {
             fin.close();
 
             resolve(data);
-        });        
+        });
     });
 }
 
@@ -253,7 +264,7 @@ function follow(keyData, url) {
         .then((e, k) => {
             email = e;
             keyid = k;
-            
+
             return fs.writeFile(path.join("data", `${email}.gpg`), keyData);
         })
         .then(() => {
@@ -265,7 +276,7 @@ function follow(keyData, url) {
         })
         .then((followers) => {
             let doAdd = true;
-            
+
             for (let follower of followers) {
                 if (follower.email == email) {
                     doAdd = false;
@@ -280,7 +291,7 @@ function follow(keyData, url) {
                     keyid: keyid
                 });
             }
-            return saveFollowers(followers);            
+            return saveFollowers(followers);
         })
         .then(() => {
             return regenerate();
@@ -315,7 +326,7 @@ function unfollow(keyData, url) {
             return saveFollowers(followers);
         })
         .then(() => {
-            return regenerate();            
+            return regenerate();
         });
 }
 
@@ -335,7 +346,7 @@ function readOptions() {
                 password: values[3].toString().trim(),
                 title: values[4].toString().trim()
             });
-        });   
+        });
     });
 }
 
@@ -480,7 +491,7 @@ function handlePingReq(req, res) {
                     })
                     .catch(() => {
                         // Unknown repository, clone it.
-                        cloneFollower(following);                        
+                        cloneFollower(following);
                     });
             }
         }
@@ -510,7 +521,7 @@ function handlePrivIndex(options, req, res) {
     let auth, authStr, authUser, authPwd;
 
     auth = req.headers["authorization"];
-    
+
     if (auth && auth.startsWith("Basic ")) {
         authStr = Buffer.from(auth.substring(6), "base64").toString("ascii");
         authUser = authStr.substring(0, authStr.indexOf(":"));
@@ -518,9 +529,9 @@ function handlePrivIndex(options, req, res) {
 
         if (authUser == options.user && authPwd == options.password) {
             console.log(`Private index request from: ${req.connection.remoteAddress}`);
-            
+
             fs.readFile(path.join("public", "priv.html"))
-                .then((data) => {                   
+                .then((data) => {
                     res.writeHead(200);
                     res.end(data);
                 });
@@ -592,7 +603,7 @@ function handleLogoReq(req, res) {
         .catch((err) => {
             res.writeHead(404);
             res.end("No logo.png file");
-        });    
+        });
 }
 
 // This code forwards HTTP requests to the Git repository.
@@ -714,7 +725,7 @@ readOptions().then((options) => {
             if (url.pathname == "/") handleIndex(req, res);
 
             else if (url.pathname == "/logo") handleLogoReq(req, res);
-            
+
             // Style: local stylesheet
             else if (url.pathname == "/style") handleStyleReq(req, res);
 
@@ -752,7 +763,7 @@ readOptions().then((options) => {
     });
 
     checkFollowing();
-    
+
     // Watch the 'following' file for changes, if it exists.
     fs.access("following")
         .then(() => {
@@ -763,7 +774,7 @@ readOptions().then((options) => {
         .catch(() => {
             // Nevermind.
         });
-   
+
     console.log(`Listening on ${options.hostname}:${options.port}`);
-    server.listen(options.port, options.hostname);    
+    server.listen(options.port, options.hostname);
 });

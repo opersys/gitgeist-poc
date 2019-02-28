@@ -3,7 +3,10 @@
 
 [ -z "$1" ] && echo "./getkey email@address" && exit 1
 
-gpg --with-colons --with-fingerprint --list-keys $1 2> /dev/null \
+. functions
+gpg=$(findGPG)
+
+$gpg --with-colons --with-fingerprint --list-keys $1 2> /dev/null \
     | grep -E "^fpr" \
     | head -1 \
     | cut -d ":" -f 10 \

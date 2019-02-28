@@ -6,6 +6,10 @@ rev_new=$3
 
 zero="0000000000000000000000000000000000000000"
 
+. ../scripts/functions
+
+gpg=$(findGPG);
+
 if [ "$rev_old" = "$zero" ]; then
     span=$(git rev-list $rev_new --not --branches='*')
 else
@@ -29,7 +33,7 @@ if [ -z "$span" ]; then
 fi
 
 # Extract the local key ID so we can push to our own repository!
-local_keyid=$(gpg --with-colons --with-fingerprint < ../data/key.gpg \
+local_keyid=$($gpg --with-colons --with-fingerprint < ../data/key.gpg \
                   | grep fpr \
                   | cut -d ':' -f 10 \
                   | tr -d ' ')
@@ -52,7 +56,7 @@ for commit in $span; do
         fi
     fi
 
-    signing_keyid=$(gpg --with-colons --with-fingerprint --list-public-keys \
+    signing_keyid=$($gpg --with-colons --with-fingerprint --list-public-keys \
                         $(git show --no-patch --format=%GK "$commit") \
                         | grep fpr \
                         | head -1 \

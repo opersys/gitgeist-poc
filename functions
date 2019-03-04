@@ -1,0 +1,17 @@
+function findGPG() {
+    local gpgBins
+    local gpg
+
+    gpgBins=("gpg" "gpg2")
+    
+    for i in ${gpgBins[@]}; do
+        gpg=${gpgBins[@]:1}
+        if [ ! -z "$(which $gpg)" ]; then
+            break
+        else
+            gpg=
+        fi
+    done
+
+    echo $gpg
+}

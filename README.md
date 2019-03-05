@@ -6,7 +6,7 @@ Posts and comments are stored in a Git repository which is used by the engine to
 
 ## Requirements
 
-You need a fairly recent (10.x) version of Node.js in order to use gitgeist. Recent versions of Git and GPG are also recommended.
+You *need* a fairly recent (10.x) version of Node.js in order to use gitgeist. Recent versions of Git and GPG are also recommended.
 
 ## Quickstart
 
